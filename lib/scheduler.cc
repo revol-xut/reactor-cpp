@@ -244,10 +244,10 @@ void Scheduler::next() { // NOLINT
     std::unique_lock<std::mutex> lock{scheduling_mutex_};
 
     // shutdown if there are no more events in the queue
-    if (event_queue_.empty() && !stop_) {
+    if (event_queue_.empty() && !(stop_.load(std::memory_order_acquire)) {
       if (environment_->run_forever()) {
         // wait for a new asynchronous event
-        cv_schedule_.wait(lock, [this]() { return !event_queue_.empty() || stop_; });
+        cv_schedule_.wait(lock, [this]() { return !event_queue_.empty() || stop_.load(std::memory_order_acquire) });
       } else {
         log::Debug() << "No more events in queue_. -> Terminate!";
         environment_->sync_shutdown();
@@ -255,7 +255,7 @@ void Scheduler::next() { // NOLINT
     }
 
     while (events.empty()) {
-      if (stop_) {
+      if (stop_.load(std::memory_order_acquire)) {
         continue_execution_ = false;
         log::Debug() << "Shutting down the scheduler";
         Tag t_next = Tag::from_logical_time(logical_time_).delay();
@@ -394,7 +394,7 @@ void Scheduler::set_port_helper(BasePort* port) { // NOLINT
 }
 
 void Scheduler::stop() {
-  stop_ = true;
+  stop_.store(true, std::memory_order_release);
   cv_schedule_.notify_one();
 }
 
